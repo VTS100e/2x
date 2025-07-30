@@ -206,26 +206,54 @@ def zivot_andrews_app(df):
                 # Visualization
                 st.header("📈 Visualisasi")
                 fig = go.Figure()
+                
+                # Convert index to appropriate format for plotting
+                x_values = series_to_test.index
+                if isinstance(series_to_test.index, pd.DatetimeIndex):
+                    x_values = series_to_test.index.to_pydatetime()
+                    break_date_plot = break_date.to_pydatetime() if hasattr(break_date, 'to_pydatetime') else break_date
+                else:
+                    break_date_plot = break_date
+                
                 fig.add_trace(go.Scatter(
-                    x=series_to_test.index, 
-                    y=series_to_test, 
+                    x=x_values, 
+                    y=series_to_test.values, 
                     mode='lines', 
                     name=selected_column,
                     line=dict(color='blue', width=1)
                 ))
-                fig.add_vline(
-                    x=break_date, 
-                    line_width=3, 
-                    line_dash="dash", 
-                    line_color="red", 
-                    annotation_text="Patahan Terdeteksi", 
-                    annotation_position="top right"
+                
+                # Add vertical line for breakpoint - use add_shape instead of add_vline
+                fig.add_shape(
+                    type="line",
+                    x0=break_date_plot,
+                    x1=break_date_plot,
+                    y0=0,
+                    y1=1,
+                    yref="paper",
+                    line=dict(color="red", width=3, dash="dash"),
                 )
+                
+                # Add annotation for the breakpoint
+                fig.add_annotation(
+                    x=break_date_plot,
+                    y=0.9,
+                    yref="paper",
+                    text="Patahan Terdeteksi",
+                    showarrow=True,
+                    arrowhead=2,
+                    arrowcolor="red",
+                    bgcolor="white",
+                    bordercolor="red",
+                    borderwidth=1
+                )
+                
                 fig.update_layout(
                     title=f'Plot "{selected_column}" dengan Patahan Struktural',
                     xaxis_title='Tanggal/Index',
                     yaxis_title='Nilai',
-                    hovermode='x unified'
+                    hovermode='x unified',
+                    showlegend=True
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
