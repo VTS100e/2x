@@ -12,6 +12,76 @@ st.set_page_config(
 )
 
 # =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
+def debug_za_test_object(za_test):
+    """Function to debug ZA test object and find available attributes"""
+    st.write("### 🔍 Debug Information")
+    
+    # Show all public attributes
+    public_attrs = [attr for attr in dir(za_test) if not attr.startswith('_')]
+    st.write("**All public attributes:**", public_attrs)
+    
+    # Check for breakpoint-related attributes
+    breakpoint_attrs = [attr for attr in dir(za_test) if 'break' in attr.lower() or 'brk' in attr]
+    st.write("**Breakpoint-related attributes:**", breakpoint_attrs)
+    
+    # Check for critical value attributes
+    cv_attrs = [attr for attr in dir(za_test) if 'cv' in attr.lower() or 'crit' in attr.lower()]
+    st.write("**Critical value attributes:**", cv_attrs)
+    
+    # Try to show actual values
+    st.write("**Attribute values:**")
+    for attr in public_attrs[:10]:  # Show first 10 to avoid clutter
+        try:
+            value = getattr(za_test, attr)
+            if not callable(value):
+                st.write(f"- {attr}: {value}")
+        except:
+            st.write(f"- {attr}: <unable to access>")
+
+def get_breakpoint_safe(za_test, series_length):
+    """Safely get breakpoint from ZA test result"""
+    breakpoint_candidates = [
+        'breakpoint', 'brk', '_breakpoint', '_brk', 
+        'break_point', 'structural_break', 'tb'
+    ]
+    
+    for attr in breakpoint_candidates:
+        if hasattr(za_test, attr):
+            try:
+                bp = getattr(za_test, attr)
+                if isinstance(bp, (int, float)) and 0 <= bp < series_length:
+                    return int(bp)
+            except:
+                continue
+    
+    # If all fails, return middle point as estimate
+    return series_length // 2
+
+def get_critical_values_safe(za_test):
+    """Safely get critical values from ZA test result"""
+    # Try different methods to get critical values
+    methods = [
+        # Method 1: Individual attributes
+        lambda: {'1%': za_test.cv_1, '5%': za_test.cv_5, '10%': za_test.cv_10},
+        # Method 2: Critical values dict
+        lambda: za_test.critical_values,
+        # Method 3: Alternative naming
+        lambda: {'1%': za_test.cv1, '5%': za_test.cv5, '10%': za_test.cv10},
+    ]
+    
+    for method in methods:
+        try:
+            cv = method()
+            if cv and all(isinstance(v, (int, float)) for v in cv.values()):
+                return cv
+        except:
+            continue
+    
+    return None
+
+# =============================================================================
 # FUNGSI UNTUK APLIKASI UJI ZIVOT-ANDREWS
 # =============================================================================
 def zivot_andrews_app(df):
@@ -75,18 +145,17 @@ def zivot_andrews_app(df):
                     method=lag_method.lower()
                 )
                 
+                # Debug: Tampilkan atribut yang tersedia (hanya untuk debugging)
+                if st.sidebar.checkbox("🔍 Debug Mode", key="debug_za"):
+                    debug_za_test_object(za_test)
+                
                 # --- BAGIAN KRITIS YANG DIPERBAIKI SECARA PERMANEN ---
-                try:
-                    # Mencoba atribut untuk versi baru
-                    break_index = za_test.breakpoint
-                except AttributeError:
-                    try:
-                        # Jika gagal, gunakan atribut untuk versi lama
-                        break_index = za_test.brk
-                    except AttributeError:
-                        # Fallback jika kedua atribut tidak ada
-                        st.error("Tidak dapat mengakses informasi breakpoint dari hasil uji.")
-                        return
+                # Gunakan helper function untuk mendapatkan breakpoint
+                break_index = get_breakpoint_safe(za_test, len(series_to_test))
+                
+                if break_index is None or break_index >= len(series_to_test):
+                    st.error("Tidak dapat menentukan breakpoint yang valid. Silakan coba dengan data atau pengaturan yang berbeda.")
+                    return
                 # ----------------------------------------------------
                 
                 # Ensure break_index is within valid range
@@ -119,18 +188,18 @@ def zivot_andrews_app(df):
 
                 # Display critical values with error handling
                 st.subheader("Nilai Kritis")
-                try:
-                    crit_values_df = pd.DataFrame({
-                        'Tingkat Signifikansi': ['1%', '5%', '10%'],
-                        'Nilai Kritis': [
-                            getattr(za_test, 'cv_1', 'N/A'),
-                            getattr(za_test, 'cv_5', 'N/A'),
-                            getattr(za_test, 'cv_10', 'N/A')
-                        ]
-                    }).set_index('Tingkat Signifikansi')
+                crit_values = get_critical_values_safe(za_test)
+                
+                if crit_values:
+                    crit_values_df = pd.DataFrame.from_dict(
+                        crit_values, 
+                        orient='index', 
+                        columns=['Nilai Kritis']
+                    )
+                    crit_values_df.index.name = "Tingkat Signifikansi"
                     st.table(crit_values_df)
-                except Exception as e:
-                    st.warning(f"Tidak dapat menampilkan nilai kritis: {e}")
+                else:
+                    st.warning("Nilai kritis tidak tersedia. Gunakan Debug Mode untuk melihat atribut yang tersedia.")
                 
                 st.caption(f"Lag yang digunakan dalam model: {getattr(za_test, 'lags', 'N/A')}")
 
