@@ -59,8 +59,17 @@ def zivot_andrews_app(df):
             st.warning("Data terlalu sedikit untuk hasil yang andal.")
         else:
             with st.spinner('Menjalankan Uji Zivot-Andrews...'):
-                za_test = ZivotAndrews(series_to_test, lags=max_lags, trend=arch_model, method=lag_method)
-                break_index = za_test.breakpoint
+                za_test = ZivotAndrews(series_to_test, lags=max_lags, trend=arch_model, method=method)
+                
+                # --- BAGIAN KRITIS YANG DIPERBAIKI SECARA PERMANEN ---
+                try:
+                    # Mencoba atribut untuk versi baru
+                    break_index = za_test.breakpoint
+                except AttributeError:
+                    # Jika gagal, gunakan atribut untuk versi lama
+                    break_index = za_test.brk
+                # ----------------------------------------------------
+                
                 break_date = series_to_test.index[break_index]
 
                 st.subheader("🔬 Hasil Uji")
